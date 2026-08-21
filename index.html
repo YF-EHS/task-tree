@@ -155,7 +155,7 @@
     width: max-content;
     min-width: 100%;
   }
-  .row:hover{ background: #F7F6F2; }
+  .row:hover{ background: #E7E4DA; }
   .row.drop-before{ box-shadow: 0 -2px 0 0 var(--teal); }
   .row.drop-after{ box-shadow: 0 2px 0 0 var(--teal); }
   .row.drop-inside{ background: #EAF3F2; box-shadow: 0 0 0 1.5px var(--teal) inset; }
@@ -1231,8 +1231,9 @@ document.getElementById('textInput').addEventListener('mouseup', saveRTESelectio
 document.getElementById('textInput').addEventListener('keyup', saveRTESelection);
 
 function applyRTECommand(cmd, value){
+  const editor = document.getElementById('textInput');
+  editor.focus();
   restoreRTESelection();
-  document.getElementById('textInput').focus();
   try{ document.execCommand('styleWithCSS', false, true); }catch(err){}
   document.execCommand(cmd, false, value);
   saveRTESelection();
