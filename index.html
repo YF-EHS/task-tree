@@ -85,6 +85,23 @@
     min-height: 14px;
   }
 
+  .collapse-all-bar{
+    margin: -2px 0 10px 2px;
+    font-size: 13px;
+    color: var(--ink);
+  }
+  .collapse-all-bar label{
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .collapse-all-bar input[type=checkbox]{
+    width: 16px; height: 16px;
+    margin-top: 0;
+  }
+
   .panel{
     background: var(--paper);
     border: 1px solid var(--border);
@@ -143,37 +160,14 @@
   .row.drop-after{ box-shadow: 0 2px 0 0 var(--teal); }
   .row.drop-inside{ background: #EAF3F2; box-shadow: 0 0 0 1.5px var(--teal) inset; }
 
-  .triangle{
-    flex-shrink:0;
-    width: 20px;
-    height: 26px;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    text-align:center;
-    cursor:pointer;
+  .tri-end{
+    display: inline-block;
+    margin-left: 8px;
     color: var(--slate);
     font-size: 11px;
+    font-weight: 400;
     user-select: none;
-    -webkit-tap-highlight-color: transparent;
-  }
-  .triangle.empty{ visibility:hidden; cursor:default; width:0; }
-  .triangle:hover{ color: var(--ink); }
-
-  /* 只有滑鼠可以真正 hover 的裝置（電腦）才把三角形收起來，
-     滑到該列時才浮現，讓清單看起來密集一點；
-     觸控裝置（手機／平板）沒有 hover，維持原本一直看得到，避免無法展開 */
-  @media (hover: hover) and (pointer: fine){
-    .triangle:not(.empty){
-      width: 0;
-      overflow: hidden;
-      opacity: 0;
-      transition: width .12s ease, opacity .12s ease;
-    }
-    .row:hover .triangle:not(.empty){
-      width: 20px;
-      opacity: 1;
-    }
+    vertical-align: 1px;
   }
 
   input[type=checkbox]{
@@ -341,7 +335,7 @@
   @media print{
     body{ background: #fff; padding: 0; }
     .wrap{ max-width: none; margin: 0; }
-    .toolbar, .status, .btnrow, .triangle{ display:none !important; }
+    .toolbar, .status, .btnrow, .tri-end, .collapse-all-bar{ display:none !important; }
     .panel{ border:none; box-shadow:none; padding:0; overflow: visible; }
     .row{ width: auto !important; min-width: 0 !important; }
     .text{ white-space: pre-wrap !important; word-break: break-word; overflow-wrap: break-word; }
@@ -366,6 +360,10 @@
     <button id="syncCodeBtn">雲端代碼</button>
   </div>
   <input type="file" id="fileInput" accept="application/json" style="display:none;">
+
+  <div class="collapse-all-bar">
+    <label><input type="checkbox" id="collapseAllToggle"> 全隱藏</label>
+  </div>
 
   <div class="status" id="statusLine"></div>
 
@@ -708,6 +706,13 @@ function clearCompleted(list){
   }
 }
 
+function setAllCollapsed(list, value){
+  list.forEach(n => {
+    n.collapsed = value;
+    setAllCollapsed(n.children, value);
+  });
+}
+
 function render(){
   if(titleEl.getAttribute('contenteditable') !== 'true'){
     titleEl.textContent = state.title;
@@ -746,12 +751,6 @@ function renderNode(node, depth, numberLabel){
   row.className = 'row';
 
   const hasChildren = node.children.length > 0;
-  const triangle = document.createElement('span');
-  triangle.className = 'triangle' + (hasChildren ? '' : ' empty');
-  triangle.textContent = hasChildren ? (node.collapsed ? '▶' : '▼') : '';
-  if(hasChildren){
-    triangle.title = node.collapsed ? '展開子任務' : '隱藏子任務';
-  }
 
   const cb = document.createElement('input');
   cb.type = 'checkbox';
@@ -764,7 +763,13 @@ function renderNode(node, depth, numberLabel){
 
   const text = document.createElement('div');
   text.className = 'text' + (node.checked ? ' checked' : '');
-  text.innerHTML = linkify(computeDisplayText(node, numberLabel));
+  let textHtml = linkify(computeDisplayText(node, numberLabel));
+  if(hasChildren){
+    const glyph = node.collapsed ? '▶' : '▼';
+    const title = node.collapsed ? '展開子任務' : '隱藏子任務';
+    textHtml += ` <span class="tri-end" title="${title}">${glyph}</span>`;
+  }
+  text.innerHTML = textHtml;
 
   const btnrow = document.createElement('div');
   btnrow.className = 'btnrow';
@@ -794,7 +799,6 @@ function renderNode(node, depth, numberLabel){
   btnrow.appendChild(editBtn);
   btnrow.appendChild(addBtn);
   btnrow.appendChild(delBtn);
-  row.appendChild(triangle);
   row.appendChild(cb);
   row.appendChild(text);
   row.appendChild(btnrow);
@@ -859,11 +863,13 @@ async function loadPersisted(){
       state.title = parsed.title || state.title;
       state.tasks = (parsed.tasks || []).map(migrateNode);
     } else {
-      state.tasks = sampleTasks();
+      state.tasks = [];
     }
   }catch(err){
-    state.tasks = sampleTasks();
+    state.tasks = [];
   }
+  setAllCollapsed(state.tasks, false);
+  document.getElementById('collapseAllToggle').checked = false;
   status.textContent = '';
   render();
 }
@@ -1035,6 +1041,13 @@ document.getElementById('clearDoneBtn').addEventListener('click', () => {
   render();
 });
 
+/* ---- 全隱藏／全展開 ---- */
+document.getElementById('collapseAllToggle').addEventListener('change', (e) => {
+  setAllCollapsed(state.tasks, e.target.checked);
+  scheduleSave();
+  render();
+});
+
 /* ---- 根層拖曳放置區（讓子任務可變主任務）---- */
 const panel = document.getElementById('panel');
 panel.addEventListener('dragover', (e) => {
@@ -1106,6 +1119,7 @@ async function cloudSave(){
 function bindCloudSync(){
   const syncCode = getSyncCode();
   cloudDocRef = doc(db, 'taskTrees', syncCode);
+  let firstSnapshot = true;
   onSnapshot(cloudDocRef, (snap) => {
     const status = document.getElementById('statusLine');
     if(snap.exists()){
@@ -1113,6 +1127,12 @@ function bindCloudSync(){
       applyingRemote = true;
       state.title = data.title || state.title;
       state.tasks = (data.tasks || []).map(migrateNode);
+      if(firstSnapshot){
+        // 每次開啟／切換清單時，預設全部展開
+        setAllCollapsed(state.tasks, false);
+        document.getElementById('collapseAllToggle').checked = false;
+        firstSnapshot = false;
+      }
       render();
       applyingRemote = false;
       if(!snap.metadata.hasPendingWrites){
@@ -1122,6 +1142,7 @@ function bindCloudSync(){
     } else {
       // 這組同步代碼在雲端還沒有資料，建立一份空白清單（不再自動帶入範例資料）
       state.tasks = [];
+      firstSnapshot = false;
       render();
       cloudSave();
     }
