@@ -332,6 +332,99 @@
   .modal-actions .delete{ background: var(--paper); border: 1px solid var(--red); color: var(--red); }
   .modal-actions .delete:hover{ background: #FBEEEC; }
 
+  /* ---- 富文字工具列 ---- */
+  .rte-toolbar{
+    display:flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: -2px 0 8px;
+  }
+  .rte-btn{
+    position: relative;
+    width: 30px; height: 30px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--paper);
+    color: var(--ink);
+    font-size: 14px;
+    line-height: 1;
+    cursor: pointer;
+    display:flex; align-items:center; justify-content:center;
+    overflow: hidden;
+    font-family: inherit;
+  }
+  .rte-btn:hover{ border-color: var(--navy-dim); }
+  .rte-btn b, .rte-btn i, .rte-btn u{ pointer-events:none; }
+  .rte-color-icon, .rte-highlight-icon{
+    pointer-events:none;
+    font-weight:700;
+    font-size:13px;
+    border-bottom: 3px solid var(--red);
+    line-height:1.1;
+  }
+  .rte-highlight-icon{ border-bottom-color:#F2C230; background:none; }
+  .rte-color-input{
+    position:absolute; inset:0;
+    width:100%; height:100%;
+    opacity:0; cursor:pointer; border:none; padding:0;
+  }
+  .rte-editor{
+    width: 100%;
+    min-height: 64px;
+    max-height: 260px;
+    overflow-y: auto;
+    font-size: 14px;
+    line-height: 1.5;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    margin-bottom: 12px;
+    font-family: inherit;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .rte-editor:focus{ outline:none; border-color: var(--navy-dim); }
+  .rte-editor:empty:not(:focus):before{
+    content: attr(data-placeholder);
+    color: var(--slate);
+  }
+
+  /* ---- 任務關聯（黃底色）---- */
+  .text .task-ref{
+    background: #FFF3A0;
+    border-radius: 2px;
+    padding: 0 2px;
+    cursor: pointer;
+    text-decoration: underline dotted;
+    text-decoration-color: #C9A62A;
+  }
+  .row.ref-flash{
+    animation: refFlash 2s ease;
+  }
+  @keyframes refFlash{
+    0%{ background: #FFE58A; }
+    100%{ background: transparent; }
+  }
+
+  /* ---- 任務關聯選擇彈窗 ---- */
+  .link-modal{ max-width: 340px; }
+  #linkSearchInput{ margin-bottom: 8px; }
+  .link-results{
+    max-height: 240px;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    margin-bottom: 12px;
+  }
+  .link-result-item{
+    padding: 8px 10px;
+    font-size: 13.5px;
+    cursor: pointer;
+    border-bottom: 1px solid var(--border);
+  }
+  .link-result-item:last-child{ border-bottom:none; }
+  .link-result-item:hover{ background: #F7F6F2; }
+
   @media print{
     body{ background: #fff; padding: 0; }
     .wrap{ max-width: none; margin: 0; }
@@ -396,7 +489,22 @@
     </select>
 
     <label for="textInput">內容</label>
-    <textarea id="textInput" placeholder="輸入任務內容，按 Enter 直接新增，Shift+Enter 換行"></textarea>
+    <div class="rte-toolbar">
+      <button type="button" class="rte-btn" id="rteBold" title="粗體"><b>B</b></button>
+      <button type="button" class="rte-btn" id="rteItalic" title="斜體"><i>I</i></button>
+      <button type="button" class="rte-btn" id="rteUnderline" title="底線"><u>U</u></button>
+      <button type="button" class="rte-btn" id="rteColorBtn" title="文字顏色">
+        <span class="rte-color-icon">A</span>
+        <input type="color" id="rteColorInput" class="rte-color-input" value="#B23A2F">
+      </button>
+      <button type="button" class="rte-btn" id="rteHighlightBtn" title="文字背景色">
+        <span class="rte-highlight-icon">A</span>
+        <input type="color" id="rteHighlightInput" class="rte-color-input" value="#FFF176">
+      </button>
+      <button type="button" class="rte-btn" id="rteLink" title="關聯到其他任務">🔗</button>
+      <button type="button" class="rte-btn" id="rteClear" title="清除格式">⨯</button>
+    </div>
+    <div id="textInput" class="rte-editor" contenteditable="true" data-placeholder="輸入任務內容，按 Enter 直接新增，Shift+Enter 換行"></div>
 
     <div class="modal-actions">
       <div class="left"></div>
@@ -404,6 +512,18 @@
         <button class="cancel" id="modalCancel">取消</button>
         <button class="confirm" id="modalConfirm">新增</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<div class="overlay hidden" id="linkOverlay">
+  <div class="modal link-modal">
+    <h3>選擇要關聯的任務</h3>
+    <input type="text" id="linkSearchInput" placeholder="輸入關鍵字搜尋任務…">
+    <div id="linkResultsList" class="link-results"></div>
+    <div class="modal-actions">
+      <div class="left"></div>
+      <div class="right"><button class="cancel" id="linkCancelBtn">取消</button></div>
     </div>
   </div>
 </div>
@@ -431,13 +551,98 @@ function todayStr(){
 function escapeHtml(str){
   return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
-function linkify(str){
-  const escaped = escapeHtml(str);
+/* node.content 現在是（已消毒過的）HTML 字串，不再是純文字，
+   所以自動連結網址時必須用 DOM 走訪文字節點，而不是整段字串跳脫。 */
+function linkifyHtml(html){
+  const container = document.createElement('div');
+  container.innerHTML = html;
   const urlRegex = /((https?:\/\/|www\.)[^\s<>"']+)/gi;
-  return escaped.replace(urlRegex, (match) => {
-    const href = match.toLowerCase().startsWith('http') ? match : 'https://' + match;
-    return `<a href="${href}" target="_blank" rel="noopener noreferrer" class="task-link">${match}</a>`;
-  });
+  function walk(node){
+    if(node.nodeType === 3){
+      const text = node.nodeValue;
+      urlRegex.lastIndex = 0;
+      if(!urlRegex.test(text)) return;
+      urlRegex.lastIndex = 0;
+      const frag = document.createDocumentFragment();
+      let lastIndex = 0;
+      let m;
+      while((m = urlRegex.exec(text)) !== null){
+        if(m.index > lastIndex) frag.appendChild(document.createTextNode(text.slice(lastIndex, m.index)));
+        const match = m[0];
+        const href = match.toLowerCase().startsWith('http') ? match : 'https://' + match;
+        const a = document.createElement('a');
+        a.href = href; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.className = 'task-link';
+        a.textContent = match;
+        frag.appendChild(a);
+        lastIndex = m.index + match.length;
+      }
+      if(lastIndex < text.length) frag.appendChild(document.createTextNode(text.slice(lastIndex)));
+      node.parentNode.replaceChild(frag, node);
+    } else if(node.nodeType === 1 && node.tagName !== 'A'){
+      Array.from(node.childNodes).forEach(walk);
+    }
+  }
+  Array.from(container.childNodes).forEach(walk);
+  return container.innerHTML;
+}
+function stripHtml(html){
+  const d = document.createElement('div');
+  d.innerHTML = html || '';
+  return d.textContent || '';
+}
+/* 儲存內容前先消毒：只留白名單標籤與必要屬性，避免存入來路不明的 HTML／腳本 */
+const RTE_ALLOWED_TAGS = new Set(['B','STRONG','I','EM','U','SPAN','BR','A']);
+function sanitizeContentHtml(html){
+  const container = document.createElement('div');
+  container.innerHTML = html || '';
+  (function clean(parent){
+    Array.from(parent.childNodes).forEach(child => {
+      if(child.nodeType === 1){
+        let el = child;
+        if(el.tagName === 'FONT'){
+          const span = document.createElement('span');
+          const color = el.getAttribute('color');
+          if(color) span.style.color = color;
+          while(el.firstChild) span.appendChild(el.firstChild);
+          el.parentNode.replaceChild(span, el);
+          el = span;
+        }
+        if(!RTE_ALLOWED_TAGS.has(el.tagName)){
+          while(el.firstChild) parent.insertBefore(el.firstChild, el);
+          parent.removeChild(el);
+          return;
+        }
+        if(el.tagName === 'SPAN'){
+          const isRef = el.classList.contains('task-ref');
+          const refTarget = el.getAttribute('data-ref-target');
+          const color = el.style.color;
+          const bg = el.style.backgroundColor;
+          Array.from(el.attributes).forEach(a => el.removeAttribute(a.name));
+          const styleParts = [];
+          if(color) styleParts.push('color:' + color);
+          if(bg) styleParts.push('background-color:' + bg);
+          if(styleParts.length) el.setAttribute('style', styleParts.join(';'));
+          if(isRef && refTarget){
+            el.className = 'task-ref';
+            el.setAttribute('data-ref-target', refTarget);
+          }
+        } else if(el.tagName === 'A'){
+          const href = el.getAttribute('href');
+          Array.from(el.attributes).forEach(a => el.removeAttribute(a.name));
+          if(href) el.setAttribute('href', href);
+          el.setAttribute('target', '_blank');
+          el.setAttribute('rel', 'noopener noreferrer');
+          el.className = 'task-link';
+        } else {
+          Array.from(el.attributes).forEach(a => el.removeAttribute(a.name));
+        }
+        clean(el);
+      } else if(child.nodeType !== 3){
+        parent.removeChild(child);
+      }
+    });
+  })(container);
+  return container.innerHTML;
 }
 
 /* ---- 編號格式轉換 ---- */
@@ -587,7 +792,7 @@ function attachRowInteractions(row, li, node){
   // 桌面：整列可拖曳（原生 HTML5 拖放，滑鼠按住移動才會觸發，單純點擊不受影響）
   row.draggable = true;
   row.addEventListener('dragstart', (e) => {
-    if(e.target.closest('input,button,a')){ e.preventDefault(); return; }
+    if(e.target.closest('input,button,a,.task-ref')){ e.preventDefault(); return; }
     dragId = node.id;
     e.dataTransfer.setData('text/plain', node.id);
     e.dataTransfer.effectAllowed = 'move';
@@ -595,7 +800,7 @@ function attachRowInteractions(row, li, node){
 
   // 桌面：單擊（非拖曳）＝ 展開／收合子任務；沒有子任務則沒有作用
   row.addEventListener('click', (e) => {
-    if(e.target.closest('input,button,a')) return;
+    if(e.target.closest('input,button,a,.task-ref')) return;
     if(!node.children.length) return;
     node.collapsed = !node.collapsed;
     scheduleSave();
@@ -607,14 +812,14 @@ function attachRowInteractions(row, li, node){
   let ghost = null, lastRow = null;
 
   row.addEventListener('touchstart', (e) => {
-    if(e.target.closest('input,button,a')) return;
+    if(e.target.closest('input,button,a,.task-ref')) return;
     const touch = e.touches[0];
     startX = touch.clientX; startY = touch.clientY;
     longPressFired = false; touchCancelled = false;
     pressTimer = setTimeout(() => {
       if(touchCancelled) return;
       longPressFired = true;
-      const label = node.content || '(空白任務)';
+      const label = stripHtml(node.content) || '(空白任務)';
       ghost = document.createElement('div');
       ghost.className = 'drag-ghost';
       ghost.textContent = label.slice(0, 40);
@@ -657,7 +862,7 @@ function attachRowInteractions(row, li, node){
   const finishTouch = (e) => {
     clearTimeout(pressTimer);
     if(!longPressFired){
-      if(!touchCancelled && !(e.target && e.target.closest && e.target.closest('input,button,a'))){
+      if(!touchCancelled && !(e.target && e.target.closest && e.target.closest('input,button,a,.task-ref'))){
         if(node.children.length){
           node.collapsed = !node.collapsed;
           scheduleSave();
@@ -713,6 +918,42 @@ function setAllCollapsed(list, value){
   });
 }
 
+/* ---- 任務關聯：跳到目標並閃一下黃底 ---- */
+function findPathToNode(list, id, path){
+  for(const n of list){
+    const nextPath = path.concat([n]);
+    if(n.id === id) return nextPath;
+    const found = findPathToNode(n.children, id, nextPath);
+    if(found) return found;
+  }
+  return null;
+}
+function flashRow(row){
+  if(!row) return;
+  row.classList.remove('ref-flash');
+  void row.offsetWidth; // 強制 reflow，讓動畫可以重新觸發
+  row.classList.add('ref-flash');
+}
+function scrollToTask(targetId){
+  if(!targetId) return;
+  const path = findPathToNode(state.tasks, targetId, []);
+  if(!path){
+    alert('找不到關聯的任務，可能已被刪除。');
+    return;
+  }
+  let needsRender = false;
+  path.slice(0, -1).forEach(ancestor => {
+    if(ancestor.collapsed){ ancestor.collapsed = false; needsRender = true; }
+  });
+  if(needsRender){ scheduleSave(); render(); }
+  requestAnimationFrame(() => {
+    const li = document.querySelector(`li[data-id="${targetId}"]`);
+    if(!li) return;
+    li.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    flashRow(li.querySelector('.row'));
+  });
+}
+
 function render(){
   if(titleEl.getAttribute('contenteditable') !== 'true'){
     titleEl.textContent = state.title;
@@ -763,13 +1004,19 @@ function renderNode(node, depth, numberLabel){
 
   const text = document.createElement('div');
   text.className = 'text' + (node.checked ? ' checked' : '');
-  let textHtml = linkify(computeDisplayText(node, numberLabel));
+  let textHtml = linkifyHtml(computeDisplayText(node, numberLabel));
   if(hasChildren){
     const glyph = node.collapsed ? '▶' : '▼';
     const title = node.collapsed ? '展開子任務' : '隱藏子任務';
     textHtml += ` <span class="tri-end" title="${title}">${glyph}</span>`;
   }
   text.innerHTML = textHtml;
+  text.querySelectorAll('.task-ref').forEach(span => {
+    span.addEventListener('click', (e) => {
+      e.stopPropagation();
+      scrollToTask(span.dataset.refTarget);
+    });
+  });
 
   const btnrow = document.createElement('div');
   btnrow.className = 'btnrow';
@@ -889,13 +1136,13 @@ function openTaskForm(opts){
     document.getElementById('dateFront').checked = formNode.datePos === 'front';
     document.getElementById('dateBack').checked = formNode.datePos === 'back';
     document.getElementById('numberingSelect').value = formNode.numberingType || 'none';
-    document.getElementById('textInput').value = formNode.content || '';
+    document.getElementById('textInput').innerHTML = formNode.content || '';
   } else {
     document.getElementById('dateInput').value = todayStr();
     document.getElementById('dateFront').checked = false;
     document.getElementById('dateBack').checked = false;
     document.getElementById('numberingSelect').value = 'none';
-    document.getElementById('textInput').value = '';
+    document.getElementById('textInput').innerHTML = '';
   }
   document.getElementById('overlay').classList.remove('hidden');
   setTimeout(() => document.getElementById('textInput').focus(), 30);
@@ -911,9 +1158,10 @@ function confirmTaskForm(){
   const dateBack = document.getElementById('dateBack').checked;
   const dateRaw = document.getElementById('dateInput').value;
   const numberingType = document.getElementById('numberingSelect').value;
-  const textVal = document.getElementById('textInput').value.trim();
+  const textVal = sanitizeContentHtml(document.getElementById('textInput').innerHTML).trim();
+  const isEmpty = stripHtml(textVal).trim() === '';
 
-  if(!textVal && !dateFront && !dateBack && numberingType === 'none'){ closeTaskForm(); return; }
+  if(isEmpty && !dateFront && !dateBack && numberingType === 'none'){ closeTaskForm(); return; }
 
   const dateStr = dateRaw ? dateRaw.replace(/-/g, '/') : '';
   const datePos = dateFront ? 'front' : (dateBack ? 'back' : 'none');
@@ -953,8 +1201,130 @@ document.getElementById('dateBack').addEventListener('change', (e) => {
   if(e.target.checked) document.getElementById('dateFront').checked = false;
 });
 document.getElementById('textInput').addEventListener('keydown', (e) => {
-  if(e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); confirmTaskForm(); }
+  if(e.key !== 'Enter') return;
+  e.preventDefault();
+  if(e.shiftKey){ document.execCommand('insertLineBreak'); }
+  else{ confirmTaskForm(); }
 });
+document.getElementById('textInput').addEventListener('paste', (e) => {
+  e.preventDefault();
+  const text = (e.clipboardData || window.clipboardData).getData('text/plain');
+  document.execCommand('insertText', false, text);
+});
+
+/* ---- 富文字工具列（粗體／斜體／底線／文字顏色／背景色／清除格式）---- */
+let savedRTERange = null;
+function saveRTESelection(){
+  const sel = window.getSelection();
+  const editor = document.getElementById('textInput');
+  if(sel && sel.rangeCount > 0 && editor.contains(sel.anchorNode)){
+    savedRTERange = sel.getRangeAt(0).cloneRange();
+  }
+}
+function restoreRTESelection(){
+  if(!savedRTERange) return;
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(savedRTERange);
+}
+document.getElementById('textInput').addEventListener('mouseup', saveRTESelection);
+document.getElementById('textInput').addEventListener('keyup', saveRTESelection);
+
+function applyRTECommand(cmd, value){
+  restoreRTESelection();
+  document.getElementById('textInput').focus();
+  try{ document.execCommand('styleWithCSS', false, true); }catch(err){}
+  document.execCommand(cmd, false, value);
+  saveRTESelection();
+}
+// 一般按鈕：用 mousedown 阻止預設行為，讓編輯區的選取文字不會被搶走焦點
+['rteBold','rteItalic','rteUnderline','rteClear','rteLink'].forEach(id => {
+  document.getElementById(id).addEventListener('mousedown', (e) => e.preventDefault());
+});
+document.getElementById('rteBold').addEventListener('click', () => applyRTECommand('bold'));
+document.getElementById('rteItalic').addEventListener('click', () => applyRTECommand('italic'));
+document.getElementById('rteUnderline').addEventListener('click', () => applyRTECommand('underline'));
+document.getElementById('rteClear').addEventListener('click', () => applyRTECommand('removeFormat'));
+// 顏色／背景色：<input type=color> 開啟原生選色器會搶走焦點，所以先記住選取範圍，選色後再套用
+document.getElementById('rteColorBtn').addEventListener('mousedown', saveRTESelection);
+document.getElementById('rteHighlightBtn').addEventListener('mousedown', saveRTESelection);
+document.getElementById('rteColorInput').addEventListener('input', (e) => applyRTECommand('foreColor', e.target.value));
+document.getElementById('rteHighlightInput').addEventListener('input', (e) => {
+  try{ applyRTECommand('hiliteColor', e.target.value); }
+  catch(err){ applyRTECommand('backColor', e.target.value); }
+});
+
+/* ---- 任務關聯：選取文字 → 挑選要連結的任務 ---- */
+let pendingLinkRange = null;
+let flatTaskList = [];
+function flattenTasks(list, depth, out){
+  list.forEach(n => {
+    out.push({ id: n.id, label: '　'.repeat(depth) + (stripHtml(n.content).trim() || '(空白任務)') });
+    flattenTasks(n.children, depth + 1, out);
+  });
+  return out;
+}
+document.getElementById('rteLink').addEventListener('click', () => {
+  const sel = window.getSelection();
+  const editor = document.getElementById('textInput');
+  if(!sel || sel.rangeCount === 0 || sel.isCollapsed || !editor.contains(sel.anchorNode)){
+    alert('請先在內容欄位中選取要建立關聯的文字。');
+    return;
+  }
+  pendingLinkRange = sel.getRangeAt(0).cloneRange();
+  flatTaskList = flattenTasks(state.tasks, 0, []);
+  document.getElementById('linkSearchInput').value = '';
+  renderLinkResults('');
+  document.getElementById('linkOverlay').classList.remove('hidden');
+  setTimeout(() => document.getElementById('linkSearchInput').focus(), 30);
+});
+function renderLinkResults(query){
+  const box = document.getElementById('linkResultsList');
+  box.innerHTML = '';
+  const q = query.trim().toLowerCase();
+  const filtered = flatTaskList.filter(t => !q || t.label.toLowerCase().includes(q));
+  if(filtered.length === 0){
+    const empty = document.createElement('div');
+    empty.className = 'link-result-item';
+    empty.style.color = 'var(--slate)';
+    empty.style.cursor = 'default';
+    empty.textContent = '沒有符合的任務';
+    box.appendChild(empty);
+    return;
+  }
+  filtered.slice(0, 50).forEach(t => {
+    const item = document.createElement('div');
+    item.className = 'link-result-item';
+    item.textContent = t.label;
+    item.addEventListener('click', () => applyTaskLink(t.id));
+    box.appendChild(item);
+  });
+}
+document.getElementById('linkSearchInput').addEventListener('input', (e) => renderLinkResults(e.target.value));
+document.getElementById('linkCancelBtn').addEventListener('click', closeLinkPicker);
+document.getElementById('linkOverlay').addEventListener('click', (e) => {
+  if(e.target.id === 'linkOverlay') closeLinkPicker();
+});
+function closeLinkPicker(){
+  document.getElementById('linkOverlay').classList.add('hidden');
+  pendingLinkRange = null;
+}
+function applyTaskLink(targetId){
+  const editor = document.getElementById('textInput');
+  editor.focus();
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  if(pendingLinkRange) sel.addRange(pendingLinkRange);
+  if(sel.rangeCount === 0 || sel.isCollapsed){
+    closeLinkPicker();
+    alert('選取的文字已遺失，請重新選取後再試一次。');
+    return;
+  }
+  const selectedText = sel.toString();
+  document.execCommand('insertHTML', false,
+    `<span class="task-ref" data-ref-target="${targetId}">${escapeHtml(selectedText)}</span>`);
+  closeLinkPicker();
+}
 
 /* ---- 標題編輯（雙擊進入編輯）---- */
 const titleEl = document.getElementById('titleEl');
