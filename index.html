@@ -617,10 +617,16 @@ function sanitizeContentHtml(html){
           const refTarget = el.getAttribute('data-ref-target');
           const color = el.style.color;
           const bg = el.style.backgroundColor;
+          const fontWeight = el.style.fontWeight;
+          const fontStyle = el.style.fontStyle;
+          const textDecoration = el.style.textDecoration || el.style.textDecorationLine;
           Array.from(el.attributes).forEach(a => el.removeAttribute(a.name));
           const styleParts = [];
           if(color) styleParts.push('color:' + color);
           if(bg) styleParts.push('background-color:' + bg);
+          if(fontWeight && (fontWeight === 'bold' || parseInt(fontWeight, 10) >= 600)) styleParts.push('font-weight:bold');
+          if(fontStyle === 'italic') styleParts.push('font-style:italic');
+          if(textDecoration && textDecoration.includes('underline')) styleParts.push('text-decoration:underline');
           if(styleParts.length) el.setAttribute('style', styleParts.join(';'));
           if(isRef && refTarget){
             el.className = 'task-ref';
