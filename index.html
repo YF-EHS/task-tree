@@ -481,11 +481,7 @@
     <label for="numberingSelect">編號（選填）</label>
     <select id="numberingSelect">
       <option value="none">不編號</option>
-      <option value="number">1. 2. 3.</option>
-      <option value="upper">A. B. C.</option>
-      <option value="lower">a. b. c.</option>
-      <option value="circle">① ② ③</option>
-      <option value="chinese">一. 二. 三.</option>
+      <option value="number">自動編號（十進位，如 1. / 1.1. / 1.1.1.）</option>
     </select>
 
     <label for="textInput">內容</label>
@@ -651,42 +647,10 @@ function sanitizeContentHtml(html){
   return container.innerHTML;
 }
 
-/* ---- 編號格式轉換 ---- */
-function numberToLetters(num, upper){
-  let s = '';
-  let n = num;
-  while(n > 0){
-    const rem = (n - 1) % 26;
-    s = String.fromCharCode(65 + rem) + s;
-    n = Math.floor((n - 1) / 26);
-  }
-  return upper ? s : s.toLowerCase();
-}
-function numberToCircled(num){
-  if(num >= 1 && num <= 20) return String.fromCodePoint(0x2460 + (num - 1));
-  return '(' + num + ')';
-}
-function numberToChinese(num){
-  const d = ['','一','二','三','四','五','六','七','八','九'];
-  if(num <= 0) return String(num);
-  if(num < 10) return d[num];
-  if(num < 20) return '十' + (num % 10 === 0 ? '' : d[num % 10]);
-  if(num < 100){
-    const tens = Math.floor(num / 10);
-    const ones = num % 10;
-    return d[tens] + '十' + (ones === 0 ? '' : d[ones]);
-  }
-  return String(num);
-}
-function getNumberingPrefix(type, index){
-  switch(type){
-    case 'number': return index + '.';
-    case 'upper': return numberToLetters(index, true) + '.';
-    case 'lower': return numberToLetters(index, false) + '.';
-    case 'circle': return numberToCircled(index) + '.';
-    case 'chinese': return numberToChinese(index) + '.';
-    default: return '';
-  }
+/* ---- 編號格式：十進位制（1. / 1.1. / 1.1.1. …），會串接父層的編號 ---- */
+function getDecimalPrefix(parentChain, index){
+  const chain = parentChain ? `${parentChain}.${index}` : String(index);
+  return { label: chain + '.', chain };
 }
 function computeDisplayText(node, numberLabel){
   const content = node.content || '';
@@ -707,7 +671,9 @@ function migrateNode(n){
   if(n.content === undefined){
     n.content = n.text !== undefined ? n.text : '';
   }
-  n.numberingType = n.numberingType || 'none';
+  // 舊版有 number/upper/lower/circle/chinese 五種各層獨立符號，
+  // 新版改為十進位制自動編號，只要曾經是「有編號」就一律轉成 'number'。
+  n.numberingType = (n.numberingType && n.numberingType !== 'none') ? 'number' : 'none';
   n.datePos = n.datePos || 'none';
   n.dateStr = n.dateStr || '';
   n.checked = !!n.checked;
@@ -971,25 +937,28 @@ function render(){
     emptyMsg.style.display = 'block';
   } else {
     emptyMsg.style.display = 'none';
-    root.appendChild(renderList(state.tasks, 0));
+    root.appendChild(renderList(state.tasks, 0, ''));
   }
 }
 
-function renderList(list, depth){
+function renderList(list, depth, parentChain){
   const frag = document.createDocumentFragment();
-  const counters = {};
+  let counter = 0;
   list.forEach(node => {
     let numberLabel = '';
+    let chainForChildren = parentChain;
     if(node.numberingType && node.numberingType !== 'none'){
-      counters[node.numberingType] = (counters[node.numberingType] || 0) + 1;
-      numberLabel = getNumberingPrefix(node.numberingType, counters[node.numberingType]);
+      counter++;
+      const { label, chain } = getDecimalPrefix(parentChain, counter);
+      numberLabel = label;
+      chainForChildren = chain;
     }
-    frag.appendChild(renderNode(node, depth, numberLabel));
+    frag.appendChild(renderNode(node, depth, numberLabel, chainForChildren));
   });
   return frag;
 }
 
-function renderNode(node, depth, numberLabel){
+function renderNode(node, depth, numberLabel, chainForChildren){
   const li = document.createElement('li');
   li.dataset.depth = depth;
   li.dataset.id = node.id;
@@ -1091,7 +1060,7 @@ function renderNode(node, depth, numberLabel){
   if(hasChildren && !node.collapsed){
     const ul = document.createElement('ul');
     ul.className = 'tree';
-    ul.appendChild(renderList(node.children, depth + 1));
+    ul.appendChild(renderList(node.children, depth + 1, chainForChildren));
     li.appendChild(ul);
   }
 
