@@ -455,7 +455,12 @@
     line-height:1;
     padding: 2px 3px;
     border-radius: 4px;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    touch-action: manipulation;
   }
+  .clip-btn.deleting{ opacity: 0.4; }
   .cloud-btn:hover, .clip-btn:hover{ background: #E7E4DA; }
   .cloud-btn:disabled{ cursor: default; opacity: 0.6; }
   .clip-btn{ font-size: 14px; }
@@ -1046,6 +1051,17 @@ function closeImageViewer(){
 }
 document.getElementById('imgViewerOverlay').addEventListener('click', closeImageViewer);
 
+function confirmDeleteImage(nodeId, idx){
+  if(confirm('確定要刪除這張照片嗎？此動作無法復原。')){
+    const node = findNodeById(state.tasks, nodeId);
+    if(node && Array.isArray(node.images)){
+      node.images.splice(idx, 1);
+      scheduleSave();
+      render();
+    }
+  }
+}
+
 function render(){
   if(titleEl.getAttribute('contenteditable') !== 'true'){
     titleEl.textContent = state.title;
@@ -1113,9 +1129,6 @@ function renderNode(node, depth, numberLabel, chainForChildren){
     });
   });
 
-  const btnrow = document.createElement('div');
-  btnrow.className = 'btnrow';
-
   const editBtn = document.createElement('button');
   editBtn.type = 'button';
   editBtn.className = 'iconbtn edit inline-icon';
@@ -1127,16 +1140,22 @@ function renderNode(node, depth, numberLabel, chainForChildren){
   });
 
   const addBtn = document.createElement('button');
-  addBtn.className = 'iconbtn add';
+  addBtn.type = 'button';
+  addBtn.className = 'iconbtn add inline-icon';
   addBtn.textContent = '+';
   addBtn.title = '新增子任務';
-  addBtn.addEventListener('click', () => openTaskForm({ mode: 'addChild', parentId: node.id }));
+  addBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    openTaskForm({ mode: 'addChild', parentId: node.id });
+  });
 
   const delBtn = document.createElement('button');
-  delBtn.className = 'iconbtn del';
+  delBtn.type = 'button';
+  delBtn.className = 'iconbtn del inline-icon';
   delBtn.textContent = '\u2212';
   delBtn.title = '刪除此任務（含子任務）';
-  delBtn.addEventListener('click', () => {
+  delBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
     extractNode(state.tasks, node.id);
     scheduleSave();
     render();
@@ -1159,23 +1178,47 @@ function renderNode(node, depth, numberLabel, chainForChildren){
     clipBtn.type = 'button';
     clipBtn.className = 'clip-btn';
     clipBtn.textContent = '📎';
-    clipBtn.title = `查看第 ${idx + 1} 張照片`;
+    clipBtn.title = `查看第 ${idx + 1} 張照片（長按可刪除）`;
+
+    let pressTimer = null;
+    let longPressFired = false;
+    const LONG_PRESS_DELETE_MS = 550;
+
+    const startPress = () => {
+      longPressFired = false;
+      clearTimeout(pressTimer);
+      pressTimer = setTimeout(() => {
+        longPressFired = true;
+        if(navigator.vibrate) navigator.vibrate(10);
+        confirmDeleteImage(node.id, idx);
+      }, LONG_PRESS_DELETE_MS);
+    };
+    const cancelPress = () => { clearTimeout(pressTimer); };
+
+    clipBtn.addEventListener('mousedown', (e) => { e.preventDefault(); startPress(); });
+    clipBtn.addEventListener('mouseup', cancelPress);
+    clipBtn.addEventListener('mouseleave', cancelPress);
+    clipBtn.addEventListener('touchstart', startPress, { passive: true });
+    clipBtn.addEventListener('touchend', cancelPress);
+    clipBtn.addEventListener('touchcancel', cancelPress);
+    clipBtn.addEventListener('touchmove', cancelPress);
+
     clipBtn.addEventListener('click', (e) => {
       e.stopPropagation();
+      if(longPressFired){ longPressFired = false; return; }
       openImageViewer(url);
     });
     imgRow.appendChild(clipBtn);
   });
 
-  // 編輯筆與雲朵／迴紋針緊接在文字（或展開三角形）後面，同一行顯示
+  // 編輯筆、雲朵／迴紋針、新增／刪除，全部緊接在文字（或展開三角形）後面，同一行顯示
   text.appendChild(editBtn);
   text.appendChild(imgRow);
+  text.appendChild(addBtn);
+  text.appendChild(delBtn);
 
-  btnrow.appendChild(addBtn);
-  btnrow.appendChild(delBtn);
   row.appendChild(cb);
   row.appendChild(text);
-  row.appendChild(btnrow);
   li.appendChild(row);
 
   attachRowInteractions(row, li, node);
