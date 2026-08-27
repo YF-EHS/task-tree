@@ -598,6 +598,8 @@ let dragId = null;
 let formMode = 'addRoot';   // 'addRoot' | 'addChild' | 'edit'
 let formParentId = null;
 let formNode = null;
+let lastDeleted = null;      // 供「復原刪除」使用：{ node, list, index }
+let lastDeletedTimer = null;
 const LONG_PRESS_MS = 550;
 
 function uid(){ return 'n' + Math.random().toString(36).slice(2,10); }
@@ -791,6 +793,55 @@ function locate(list, id){
     if(found) return found;
   }
   return null;
+}
+function countAllNodes(list){
+  let count = 0;
+  for(const n of list){
+    count += 1 + countAllNodes(n.children || []);
+  }
+  return count;
+}
+function showUndoToast(taskLabel){
+  const old = document.getElementById('undoToast');
+  if(old) old.remove();
+  clearTimeout(lastDeletedTimer);
+
+  const toast = document.createElement('div');
+  toast.id = 'undoToast';
+  toast.style.cssText = [
+    'position:fixed', 'left:50%', 'bottom:24px', 'transform:translateX(-50%)',
+    'background:var(--ink)', 'color:#fff', 'padding:10px 14px', 'border-radius:8px',
+    'font-size:13px', 'display:flex', 'align-items:center', 'gap:12px',
+    'box-shadow:0 6px 18px rgba(0,0,0,0.32)', 'z-index:300', 'max-width:90vw'
+  ].join(';');
+
+  const msg = document.createElement('span');
+  msg.textContent = `已刪除「${taskLabel}」`;
+  msg.style.cssText = 'white-space:nowrap; overflow:hidden; text-overflow:ellipsis;';
+
+  const undoBtn = document.createElement('button');
+  undoBtn.type = 'button';
+  undoBtn.textContent = '復原';
+  undoBtn.style.cssText = 'background:#fff; color:var(--navy); border:none; border-radius:5px; padding:5px 10px; font-size:12.5px; font-weight:600; cursor:pointer; flex-shrink:0;';
+  undoBtn.addEventListener('click', () => {
+    if(lastDeleted){
+      const idx = Math.min(lastDeleted.index, lastDeleted.list.length);
+      lastDeleted.list.splice(idx, 0, lastDeleted.node);
+      lastDeleted = null;
+      scheduleSave();
+      render();
+    }
+    toast.remove();
+  });
+
+  toast.appendChild(msg);
+  toast.appendChild(undoBtn);
+  document.body.appendChild(toast);
+
+  lastDeletedTimer = setTimeout(() => {
+    toast.remove();
+    lastDeleted = null;
+  }, 8000);
 }
 function moveNode(draggedId, targetId, position){
   if(draggedId === targetId) return false;
@@ -1156,7 +1207,19 @@ function renderNode(node, depth, numberLabel, chainForChildren){
   delBtn.title = '刪除此任務（含子任務）';
   delBtn.addEventListener('click', (e) => {
     e.stopPropagation();
-    extractNode(state.tasks, node.id);
+    const label = (stripHtml(node.content) || '').replace(/\s+/g, ' ').trim() || '（無標題任務）';
+    const preview = label.length > 24 ? label.slice(0, 24) + '…' : label;
+    const childCount = countAllNodes(node.children || []);
+    const msg = childCount > 0
+      ? `確定要刪除「${preview}」嗎？\n這會一併刪除其下 ${childCount} 個子任務。`
+      : `確定要刪除「${preview}」嗎？`;
+    if(!confirm(msg)) return;
+    const loc = locate(state.tasks, node.id);
+    const removed = extractNode(state.tasks, node.id);
+    if(removed && loc){
+      lastDeleted = { node: removed, list: loc.list, index: loc.index };
+      showUndoToast(preview);
+    }
     scheduleSave();
     render();
   });
