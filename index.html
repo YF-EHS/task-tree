@@ -223,6 +223,10 @@
     -webkit-user-select: none;
     user-select: none;
   }
+  /* 防呆：內容萬一混進 div／p 這類區塊元素（例如富文本編輯器換行時產生的），
+     一律當成行內元素處理，避免它們無視 white-space:pre 自己換行，
+     導致超長文字不會觸發 .panel 的水平捲軸 */
+  .text div, .text p{ display: inline; }
   .text a.task-link{
     color: var(--teal);
     text-decoration: underline;
@@ -741,6 +745,10 @@ function sanitizeContentHtml(html){
           el = span;
         }
         if(!RTE_ALLOWED_TAGS.has(el.tagName)){
+          const isBlock = (el.tagName === 'DIV' || el.tagName === 'P');
+          if(isBlock && el.previousSibling){
+            parent.insertBefore(document.createElement('br'), el);
+          }
           while(el.firstChild) parent.insertBefore(el.firstChild, el);
           parent.removeChild(el);
           return;
