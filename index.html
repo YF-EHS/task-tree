@@ -169,7 +169,7 @@
     vertical-align: 1px;
   }
 
-  /* 編輯筆／雲朵／迴紋針：緊接在文字（或三角形）後面，同一行內顯示 */
+  /* 編輯筆／雲朵／照片圖示：緊接在文字（或三角形）後面，同一行內顯示 */
   .text .iconbtn.inline-icon{
     display: inline-flex;
     width: 22px; height: 22px;
@@ -511,7 +511,7 @@
   .link-result-item:last-child{ border-bottom:none; }
   .link-result-item:hover{ background: #F7F6F2; }
 
-  /* ---- 照片上傳（雲朵／迴紋針）---- */
+  /* ---- 照片上傳（雲朵／照片圖示）---- */
   .imgrow{
     display:flex;
     align-items:center;
@@ -1322,7 +1322,7 @@ function renderNode(node, depth, numberLabel, chainForChildren){
     const clipBtn = document.createElement('button');
     clipBtn.type = 'button';
     clipBtn.className = 'clip-btn';
-    clipBtn.textContent = '📎';
+    clipBtn.textContent = '📷';
     clipBtn.title = `查看第 ${idx + 1} 張照片（長按可刪除）`;
 
     let pressTimer = null;
@@ -1356,7 +1356,7 @@ function renderNode(node, depth, numberLabel, chainForChildren){
     imgRow.appendChild(clipBtn);
   });
 
-  // 編輯筆、雲朵／迴紋針、新增／刪除，全部緊接在文字（或展開三角形）後面，同一行顯示
+  // 編輯筆、雲朵／照片圖示、新增／刪除，全部緊接在文字（或展開三角形）後面，同一行顯示
   text.appendChild(editBtn);
   text.appendChild(imgRow);
   text.appendChild(addBtn);
