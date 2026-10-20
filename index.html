@@ -1292,14 +1292,21 @@ function renderNode(node, depth, numberLabel, chainForChildren, isLatest){
   const text = document.createElement('div');
   text.className = 'text' + (node.checked ? ' checked' : '') + (isLatest ? ' is-latest-sibling' : '');
   let textHtml = linkifyHtml(computeDisplayText(node, numberLabel));
-  // 內容裡若有換行（<br>），只預設顯示第一行，其餘行收合在小箭頭後面。
+  // 內容裡若有換行，只預設顯示第一行，其餘行收合在小箭頭後面。
+  // 換行可能是 Shift+Enter 產生的 <br>，也可能是貼上多行文字時留下的純文字換行字元（\n，
+  // 靠 CSS white-space:pre 直接顯示出來），兩種都要抓。
   // 是否展開只看記憶體中的 expandedLineIds，不會存檔，重新整理網頁就會恢復收合。
   let hasExtraLines = false;
-  const brMatch = /<br\s*\/?>/i.exec(textHtml);
-  if(brMatch){
+  const brRegex = /<br\s*\/?>/i;
+  const brM = brRegex.exec(textHtml);
+  const nlIdx = textHtml.indexOf('\n');
+  let splitIndex = -1;
+  if(brM && (nlIdx === -1 || brM.index <= nlIdx)) splitIndex = brM.index;
+  else if(nlIdx !== -1) splitIndex = nlIdx;
+  if(splitIndex !== -1){
     hasExtraLines = true;
-    const firstPart = textHtml.slice(0, brMatch.index);
-    const restPart = textHtml.slice(brMatch.index); // 含最前面那個 <br>
+    const firstPart = textHtml.slice(0, splitIndex);
+    const restPart = textHtml.slice(splitIndex); // 含最前面那個換行（<br> 或 \n）
     const expanded = expandedLineIds.has(node.id);
     const lineGlyph = expanded ? '▾' : '▸';
     const lineTitle = expanded ? '收合其餘內容' : '展開其餘內容';
