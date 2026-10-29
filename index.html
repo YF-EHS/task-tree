@@ -107,13 +107,35 @@
   }
 
   .search-box{
+    display: inline-flex;
+    align-items: center;
+    flex: 1 1 420px;
+    max-width: 640px;
+    gap: 8px;
+  }
+  #rootTaskSelect{
+    flex: 0 1 200px;
+    min-width: 0;
+    box-sizing: border-box;
+    padding: 6px 8px;
+    border: 2px solid var(--navy, #1E3A5F);
+    border-radius: 6px;
+    font-size: 13px;
+    color: var(--ink);
+    background: #fff;
+  }
+  #rootTaskSelect:focus{
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(30,58,95,0.2);
+  }
+  .keyword-search{
     position: relative;
     display: inline-flex;
     align-items: center;
-    flex: 1 1 260px;
-    max-width: 420px;
+    flex: 1 1 220px;
+    min-width: 0;
   }
-  .search-box input[type=text]{
+  .keyword-search input[type=text]{
     width: 100%;
     box-sizing: border-box;
     padding: 6px 28px 6px 10px;
@@ -123,11 +145,11 @@
     color: var(--ink);
     background: #fff;
   }
-  .search-box input[type=text]:focus{
+  .keyword-search input[type=text]:focus{
     outline: none;
     box-shadow: 0 0 0 2px rgba(30,58,95,0.2);
   }
-  .search-box .search-clear{
+  .keyword-search .search-clear{
     position: absolute;
     right: 4px;
     top: 50%;
@@ -140,7 +162,7 @@
     cursor: pointer;
     padding: 4px 6px;
   }
-  .search-box .search-clear:hover{ color: var(--red); }
+  .keyword-search .search-clear:hover{ color: var(--red); }
   mark.search-hit{
     background: #FFE89A;
     color: inherit;
@@ -656,8 +678,13 @@
   <div class="collapse-all-bar">
     <label><input type="checkbox" id="collapseAllToggle"> 全隱藏</label>
     <div class="search-box">
-      <input type="text" id="searchInput" placeholder="輸入關鍵字搜尋任務…">
-      <button type="button" id="searchClearBtn" class="search-clear" title="清除搜尋" style="display:none;">×</button>
+      <select id="rootTaskSelect" title="快速選擇主任務">
+        <option value="">主任務快速選擇…</option>
+      </select>
+      <div class="keyword-search">
+        <input type="text" id="searchInput" placeholder="輸入關鍵字搜尋任務…">
+        <button type="button" id="searchClearBtn" class="search-clear" title="清除搜尋" style="display:none;">×</button>
+      </div>
     </div>
   </div>
 
@@ -1358,6 +1385,29 @@ function render(){
     }
     root.appendChild(renderList(state.tasks, 0, ''));
   }
+  populateRootTaskSelect();
+}
+
+/* 主任務快速選擇下拉選單：每次 render 都照目前的主任務（根層）重新產生選項 */
+function populateRootTaskSelect(){
+  const sel = document.getElementById('rootTaskSelect');
+  if(!sel) return;
+  sel.innerHTML = '';
+  const placeholder = document.createElement('option');
+  placeholder.value = '';
+  placeholder.textContent = '主任務快速選擇…';
+  sel.appendChild(placeholder);
+  state.tasks.forEach(node => {
+    const opt = document.createElement('option');
+    opt.value = node.id;
+    let label = (stripHtml(node.content) || '').replace(/\s+/g, ' ').trim() || '（無標題任務）';
+    if(label.length > 28) label = label.slice(0, 28) + '…';
+    opt.textContent = label;
+    opt.title = label;
+    sel.appendChild(opt);
+  });
+  // 每次重繪都還原成「未選擇」，這樣同一筆主任務可以重複點選、每次都會再捲動並閃一下
+  sel.value = '';
 }
 
 function renderList(list, depth, parentChain){
@@ -2151,6 +2201,22 @@ searchInputEl.addEventListener('keydown', (e) => {
     e.preventDefault();
     searchClearBtn.click();
   }
+});
+
+/* ---- 主任務快速選擇：直接跳到指定主任務，不用在一長串裡面找 ---- */
+document.getElementById('rootTaskSelect').addEventListener('change', (e) => {
+  const id = e.target.value;
+  if(!id) return;
+  // 先清掉關鍵字搜尋並重繪，避免目標主任務剛好被搜尋篩掉、或畫面還停在舊的篩選結果而跳不過去
+  if(searchQuery){
+    searchInputEl.value = '';
+    searchInputRaw = '';
+    searchQuery = '';
+    searchClearBtn.style.display = 'none';
+    render();
+  }
+  scrollToTask(id);
+  e.target.value = '';
 });
 
 /* ---- 根層拖曳放置區（讓子任務可變主任務）---- */
